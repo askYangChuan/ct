@@ -1,0 +1,51 @@
+对ct的工作原理做个备注，后面就直接用ct了，就不用再看如何工作的了
+
+先看Makefile
+
+CFLAGS ?= -Werror -Wall -Wwrite-strings -Wformat=2
+
+libs = msg.c
+objs = $(libs:.c=.o)
+
+tests = $(wildcard *-test.c)
+tobjs = $(tests:.c=.o)
+
+all: hello
+
+hello: hello.o $(objs)
+
+.PHONY: check
+check: ct/_ctcheck
+        +ct/_ctcheck
+
+.PHONY: bench
+bench: ct/_ctcheck
+        +ct/_ctcheck -b
+
+ct/ct.o: ct/ct.h
+
+$(tobjs): ct/ct.h
+
+ct/_ctcheck: ct/_ctcheck.o ct/ct.o $(objs) $(tobjs)
+
+ct/_ctcheck.c: $(tobjs) ct/gen
+        ct/gen $(tobjs) > $@.part
+        mv $@.part $@
+
+.PHONY: clean
+clean:
+        rm -f ct/_* *.o ct/*.o hello
+        
+Makefile很简单。这里他没有指定cc，也没有指定其他的东西，所以xxx和xxx.o的编译都是依赖默认的Makefile规则先看执行make check的效果
+
+先找到check，依赖ct/_ctcheck，找到ct/_ctcheck依赖ct/_ctcheck.o ct/ct.o $(objs) $(tobjs)
+由于没有写ct/_ctcheck.o，就使用Makefile的默认规则，找到ct/_ctcheck.c， 这里就先执行$(tobjs)，tobjs只有一个*.test.o，那么就是将所有的*-test.c编译为*-test.o
+然后调用了脚本ct/gen,gen的作用就是将前缀为cttest和ctbench的函数找到，写入到_ctcheck.c文件里面，并创建两个数组来保存函数名字。这样就找到了所有的测试函数
+ch/_ctcheck.c返回后，再编译了$(objs)， 就是msg.o，最后返回到ct/_ctcheck，将上面生成的.o全部链接起来，生成了ct/_ctcheck
+最后+ct/_ctcheck就是执行这个可执行程序。 main函数是在ct.c里面 这就是工作原理
+
+注意点：
+1，每次这个程序测试的时候，都是独立进程，所以全局变量都不会互相影响
+2，每次测试的时候，是在新的进程组，所有测试都会在测试完成后kill掉，这意味着不需要做清理线程的工作。
+3，-jN参数 可以让程序并发执行，比如 -j16就表明可以并发16个来处理，其实就是开启子进程来处理
+4, 由于程序的输出都在一个文件，所以并发的写日志的话，就会出错，所以-j1来避免并发写错误日志

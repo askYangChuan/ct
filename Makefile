@@ -1,4 +1,4 @@
-CFLAGS ?= -Werror -Wall -Wwrite-strings -Wformat=2 -ansi
+CFLAGS ?= -Werror -Wall -Wwrite-strings -Wformat=2
 
 libs = msg.c
 objs = $(libs:.c=.o)
